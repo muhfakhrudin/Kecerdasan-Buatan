@@ -23,11 +23,9 @@ URLS = [
     "https://www.tokopedia.com/boboystore889-shop/etalase/iphone-1",
     "https://www.tokopedia.com/082170800404/etalase/sold?sort=7",
     "https://www.tokopedia.com/cris0880/etalase/iphone-all-series",
-    "https://shopee.co.id/kitar.id?page=0&shopCollection=256361349",
-    "https://shopee.co.id/kitar.id?page=0&shopCollection=256361357",
-    "https://shopee.co.id/kitar.id?page=0&shopCollection=256361361",
-    "https://shopee.co.id/superiphone?page=0",
-    "https://shopee.co.id/lunexstore?page=0",
+    "https://www.tokopedia.com/jbgadgetstore/etalase/iphone-second",
+    "https://www.tokopedia.com/cahayahandphone7/etalase/iphone-second",
+    "https://www.tokopedia.com/maxsense/etalase/iphone"
 ]
 
 def extract_bh(text):
