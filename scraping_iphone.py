@@ -47,54 +47,42 @@ def extract_bh(text):
                 return val
     return None
 
-def fetch_product_description(url, driver=None):
-    """Fetch deskripsi produk.
-
-    Usahakan pakai `requests` dulu (cepat), tapi jika deskripsi di-load oleh JavaScript
-    (umum di Tokopedia) maka fallback ke Selenium dengan membuka tab baru dan
-    mengambil `page_source` setelah render.
-    """
+def fetch_product_description(url, driver):
+    """Fetch deskripsi produk menggunakan Selenium."""
     try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-        response = requests.get(url, headers=headers, timeout=10)
-        response.encoding = 'utf-8'
-        if response.status_code == 200:
-            text = response.text
-            # Jika requests berhasil dan mengandung BH, kembalikan segera
-            if extract_bh(text):
-                return text
-    except Exception as e:
-        print(f"[DEBUG] Fetch URL (requests) gagal: {e}")
-
-    # Fallback ke Selenium jika driver disediakan (untuk konten yang di-render oleh JS)
-    if driver:
+        current_handle = driver.current_window_handle
+        driver.execute_script("window.open(arguments[0]);", url)
+        time.sleep(2)
+        handles = driver.window_handles
+        new_handle = [h for h in handles if h != current_handle][-1]
+        driver.switch_to.window(new_handle)
+        time.sleep(6) # Tunggu render
+        
+        deskripsi = ""
         try:
-            current_handle = driver.current_window_handle
-            driver.execute_script("window.open(arguments[0]);", url)
-            time.sleep(2)
-            handles = driver.window_handles
-            # Ambil handle yang baru
-            new_handle = [h for h in handles if h != current_handle][-1]
-            driver.switch_to.window(new_handle)
-            time.sleep(6)
-            
-            # Ambil seluruh teks di halaman, bukan source HTML agar lebih mudah di-regex
+            # Mencoba mencari elemen deskripsi spesifik Tokopedia
+            desc_element = driver.find_element(By.XPATH, "//*[@data-testid='lblPDPDescriptionProduk']")
+            deskripsi = desc_element.text
+        except:
             try:
-                page_text = driver.find_element(By.TAG_NAME, "body").text
-            except:
-                page_text = driver.page_source
-                
-            driver.close()
-            driver.switch_to.window(current_handle)
-            return page_text
-        except Exception as e:
-            print(f"[DEBUG] Fetch URL (selenium) gagal: {e}")
-            try:
-                driver.switch_to.window(current_handle)
+                # Fallback ambil body text jika elemen spesifik tidak ketemu
+                deskripsi = driver.find_element(By.TAG_NAME, "body").text
             except:
                 pass
+            
+        driver.close()
+        driver.switch_to.window(current_handle)
+        
+        if deskripsi:
+            # Bersihkan spasi berlebih dan enter agar rapi di CSV
+            deskripsi = " ".join(deskripsi.split())
+            return deskripsi
+    except Exception as e:
+        print(f"[DEBUG] Fetch URL (selenium) gagal: {e}")
+        try:
+            driver.switch_to.window(current_handle)
+        except:
+            pass
     return None
 
 chrome_options = Options()
@@ -165,34 +153,30 @@ try:
                     
                     low_nama = nama.lower()
                     if any(x in low_nama for x in ["iphone 11", "iphone 12", "iphone 13"]):
-                        # Coba ekstrak BH dari teks box produk terlebih dahulu
-                        bh = extract_bh(full_text) or extract_bh(nama)
+                        deskripsi = ""
+                        try:
+                            a = card.find_element(By.XPATH, ".//a[@href]")
+                            href = a.get_attribute('href')
+                            if href and (href.startswith('http') or href.startswith('/')):
+                                # Pastikan URL lengkap
+                                if href.startswith('/'):
+                                    href = 'https://www.tokopedia.com' + href
+                                print(f"  → Fetch deskripsi: {href[:80]}...")
+                                fetched_desc = fetch_product_description(href, driver=driver)
+                                if fetched_desc:
+                                    deskripsi = fetched_desc
+                        except Exception as e:
+                            pass
 
-                        # Jika belum ditemukan, fetch halaman produk langsung dengan requests
-                        if not bh:
-                            try:
-                                a = card.find_element(By.XPATH, ".//a[@href]")
-                                href = a.get_attribute('href')
-                                if href and (href.startswith('http') or href.startswith('/')):
-                                    # Pastikan URL lengkap
-                                    if href.startswith('/'):
-                                        href = 'https://www.tokopedia.com' + href
-                                    print(f"  → Fetch deskripsi: {href[:80]}...")
-                                    html_content = fetch_product_description(href, driver=driver)
-                                    if html_content:
-                                        bh = extract_bh(html_content)
-                            except Exception as e:
-                                pass  # Silent fail, fallback ke "Lihat Deskripsi"
-
-                        if bh:
+                        if deskripsi:
                             all_data.append({
                                 "Toko": shop_name,
                                 "Seri": nama,
-                                "BH": bh,
+                                "Deskripsi": deskripsi,
                                 "Harga": harga
                             })
                         else:
-                            print(f"  → Dilewati (tanpa BH): {nama[:60]}...")
+                            print(f"  → Dilewati (gagal ambil deskripsi): {nama[:60]}...")
                 except Exception as card_e:
                     pass  # Silent skip problematic card
                     continue
