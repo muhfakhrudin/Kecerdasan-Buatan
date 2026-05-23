@@ -25,7 +25,8 @@ URLS = [
     "https://www.tokopedia.com/cris0880/etalase/iphone-all-series",
     "https://www.tokopedia.com/jbgadgetstore/etalase/iphone-second",
     "https://www.tokopedia.com/cahayahandphone7/etalase/iphone-second",
-    "https://www.tokopedia.com/maxsense/etalase/iphone"
+    "https://www.tokopedia.com/maxsense/etalase/iphone",
+    "https://www.tokopedia.com/riau-berry/etalase/sold?sort=7"
 ]
 
 def extract_bh(text):
@@ -51,6 +52,65 @@ def extract_bh(text):
             if val.isdigit() and 50 <= int(val) <= 100:
                 return val
     return None
+
+def extract_seri(nama):
+    if not isinstance(nama, str):
+        return "Unknown"
+    
+    nama_lower = nama.lower()
+    
+    # Daftar model iPhone yang mungkin muncul
+    models = [
+        ("iphone 13 pro max", "iPhone 13 Pro Max"),
+        ("iphone 13 promax", "iPhone 13 Pro Max"),
+        ("iphone 13 pro", "iPhone 13 Pro"),
+        ("iphone 13 mini", "iPhone 13 Mini"),
+        ("iphone 13", "iPhone 13"),
+        ("iphone 12 pro max", "iPhone 12 Pro Max"),
+        ("iphone 12 promax", "iPhone 12 Pro Max"),
+        ("iphone 12 pro", "iPhone 12 Pro"),
+        ("iphone 12 mini", "iPhone 12 Mini"),
+        ("iphone 12", "iPhone 12"),
+        ("iphone 11 pro max", "iPhone 11 Pro Max"),
+        ("iphone 11 promax", "iPhone 11 Pro Max"),
+        ("iphone 11 pro", "iPhone 11 Pro"),
+        ("iphone 11", "iPhone 11"),
+        # iPhone X / 10 Series
+        ("iphone xs max", "iPhone XS Max"),
+        ("iphone xsmax", "iPhone XS Max"),
+        ("iphone xs", "iPhone XS"),
+        ("iphone xr", "iPhone XR"),
+        ("iphone x", "iPhone X"),
+        ("iphone 10", "iPhone X"),
+    ]
+    
+    for keyword, model_name in models:
+        if keyword in nama_lower:
+            return model_name
+    
+    return "Unknown"
+
+def extract_kategori_seri(seri):
+    if "13" in seri:
+        return "iPhone 13 Series"
+    elif "12" in seri:
+        return "iPhone 12 Series"
+    elif "11" in seri:
+        return "iPhone 11 Series"
+    elif any(x in seri.lower() for x in ["iphone x", "iphone 10"]):
+        return "iPhone X Series"
+    return "Unknown"
+
+def extract_kategori_varian(nama):
+    if not isinstance(nama, str):
+        return "Unknown"
+    
+    matches = re.findall(r'(\d+)\s*(?:GB|gb|Gb|TB|tb)', nama)
+    if matches:
+        variants = [f"{m}GB" for m in matches]
+        return "/".join(variants)
+    
+    return "Unknown"
 
 def fetch_product_description(url, driver):
     """Fetch deskripsi produk menggunakan Selenium."""
@@ -157,7 +217,7 @@ try:
                     harga = next((s for s in lines if "Rp" in s), "0")
                     
                     low_nama = nama.lower()
-                    if any(x in low_nama for x in ["iphone 11", "iphone 12", "iphone 13"]):
+                    if any(x in low_nama for x in ["iphone 11", "iphone 12", "iphone 13", "iphone x", "iphone 10"]):
                         deskripsi = ""
                         try:
                             a = card.find_element(By.XPATH, ".//a[@href]")
@@ -174,10 +234,18 @@ try:
                             pass
 
                         if deskripsi:
+                            seri = extract_seri(nama)
+                            kategori_seri = extract_kategori_seri(seri)
+                            penyimpanan = extract_kategori_varian(nama)
+                            battery_health = extract_bh(deskripsi)
+
                             all_data.append({
                                 "Toko": shop_name,
-                                "Seri": nama,
-                                "Deskripsi": deskripsi,
+                                "Platform": "Tokopedia",
+                                "Kategori Seri": kategori_seri,
+                                "Kategori Varian": seri,
+                                "penyimpanan": penyimpanan,
+                                "Battery Health": battery_health if battery_health else "N/A",
                                 "Harga": harga
                             })
                         else:
@@ -190,8 +258,8 @@ try:
 
     if all_data:
         df = pd.DataFrame(all_data)
-        # Deduplicate
-        df_unique = df.drop_duplicates(subset=['Toko', 'Seri', 'Harga'], keep='first')
+        # Deduplicate berdasarkan Toko, Kategori Varian, penyimpanan, dan Harga
+        df_unique = df.drop_duplicates(subset=['Toko', 'Kategori Varian', 'penyimpanan', 'Harga'], keep='first')
         df_unique.to_csv("data_iphone_v2.csv", index=False)
         print(f"\nSUKSES! {len(df_unique)} data tersimpan di data_iphone_v2.csv")
     else:
